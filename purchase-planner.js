@@ -6,6 +6,8 @@
   const PANEL_ID = 'purchase-planner-panel';
   const BUTTON_ID = 'purchase-planner-button';
   const STYLE_ID = 'purchase-planner-style';
+  const AUTO_REFRESH_MS = 3000;
+  let autoRefreshTimer = null;
 
   function gameReady() {
     return typeof Game !== 'undefined' && Game.ObjectsById && Game.UpgradesInStore;
@@ -53,12 +55,40 @@
     getPanelHost().classList.add('purchase-planner-panel-host');
   }
 
+  function isPlannerOpen() {
+    return getPlannerRoot().classList.contains('purchase-planner-open');
+  }
+
+  function startAutoRefresh() {
+    if (autoRefreshTimer) return;
+    autoRefreshTimer = setInterval(() => {
+      if (!isPlannerOpen()) {
+        stopAutoRefresh();
+        return;
+      }
+
+      refreshPlanner();
+    }, AUTO_REFRESH_MS);
+  }
+
+  function stopAutoRefresh() {
+    if (!autoRefreshTimer) return;
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+
   function setPlannerOpen(open) {
     getPlannerRoot().classList.toggle('purchase-planner-open', open);
+    if (open) {
+      refreshPlanner();
+      startAutoRefresh();
+    } else {
+      stopAutoRefresh();
+    }
   }
 
   function togglePlanner() {
-    getPlannerRoot().classList.toggle('purchase-planner-open');
+    setPlannerOpen(!isPlannerOpen());
   }
 
   function simulateBuilding(building) {
@@ -367,7 +397,6 @@
     button.textContent = MOD_NAME;
     button.addEventListener('click', () => {
       togglePlanner();
-      refreshPlanner();
     });
 
     preparePlannerHosts();
