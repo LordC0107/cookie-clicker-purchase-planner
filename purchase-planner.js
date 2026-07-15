@@ -6,8 +6,9 @@
   const PANEL_ID = 'purchase-planner-panel';
   const BUTTON_ID = 'purchase-planner-button';
   const STYLE_ID = 'purchase-planner-style';
-  const AUTO_REFRESH_MS = 3000;
-  let autoRefreshTimer = null;
+  let purchaseWatcherInstalled = false;
+  let lastPurchaseSignature = '';
+  let isSimulatingPurchase = false;
 
   function gameReady() {
     return typeof Game !== 'undefined' && Game.ObjectsById && Game.UpgradesInStore;
@@ -59,31 +60,56 @@
     return getPlannerRoot().classList.contains('purchase-planner-open');
   }
 
-  function startAutoRefresh() {
-    if (autoRefreshTimer) return;
-    autoRefreshTimer = setInterval(() => {
-      if (!isPlannerOpen()) {
-        stopAutoRefresh();
-        return;
-      }
+  function getPurchaseSignature() {
+    if (!gameReady()) return '';
 
-      refreshPlanner();
-    }, AUTO_REFRESH_MS);
+    const buildings = Game.ObjectsById.map((building) => building.amount).join(',');
+    const upgrades = (Game.UpgradesById || Game.UpgradesInStore)
+      .map((upgrade) => (upgrade.bought ? 1 : 0))
+      .join('');
+
+    return `${buildings}|${upgrades}`;
   }
 
-  function stopAutoRefresh() {
-    if (!autoRefreshTimer) return;
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer = null;
+  function rememberPurchaseState() {
+    lastPurchaseSignature = getPurchaseSignature();
+  }
+
+  function watchPurchases() {
+    if (!isPlannerOpen() || isSimulatingPurchase) return;
+
+    const nextSignature = getPurchaseSignature();
+    if (!nextSignature || nextSignature === lastPurchaseSignature) return;
+
+    refreshPlanner();
+  }
+
+  function installPurchaseWatcher() {
+    if (purchaseWatcherInstalled || !gameReady()) return;
+    purchaseWatcherInstalled = true;
+
+    if (typeof Game.registerHook === 'function') {
+      Game.registerHook('logic', watchPurchases);
+      return;
+    }
+
+    const oldLogic = Game.Logic;
+    if (typeof oldLogic === 'function') {
+      Game.Logic = function purchasePlannerLogicWrapper() {
+        const result = oldLogic.apply(this, arguments);
+        watchPurchases();
+        return result;
+      };
+    }
   }
 
   function setPlannerOpen(open) {
     getPlannerRoot().classList.toggle('purchase-planner-open', open);
     if (open) {
+      installPurchaseWatcher();
       refreshPlanner();
-      startAutoRefresh();
     } else {
-      stopAutoRefresh();
+      rememberPurchaseState();
     }
   }
 
@@ -125,47 +151,52 @@
     const rows = [];
     const currentCps = Math.max(Game.cookiesPs, 0);
 
-    Game.ObjectsById.forEach((building) => {
-      const delta = simulateBuilding(building);
-      const cost = priceOf(building);
+    isSimulatingPurchase = true;
+    try {
+      Game.ObjectsById.forEach((building) => {
+        const delta = simulateBuilding(building);
+        const cost = priceOf(building);
 
-      if (delta > 0) {
-        const wait = currentCps > 0 ? Math.max(cost - Game.cookies, 0) / currentCps / 60 : Infinity;
-        const payback = cost / delta / 60;
+        if (delta > 0) {
+          const wait = currentCps > 0 ? Math.max(cost - Game.cookies, 0) / currentCps / 60 : Infinity;
+          const payback = cost / delta / 60;
 
-        rows.push({
-          type: 'Building',
-          name: localName(building.name),
-          owned: building.amount,
-          cost,
-          cpsGain: delta,
-          effectiveMinutes: wait + payback,
-          waitMinutes: wait,
-          paybackMinutes: payback,
-        });
-      }
-    });
+          rows.push({
+            type: 'Building',
+            name: localName(building.name),
+            owned: building.amount,
+            cost,
+            cpsGain: delta,
+            effectiveMinutes: wait + payback,
+            waitMinutes: wait,
+            paybackMinutes: payback,
+          });
+        }
+      });
 
-    Game.UpgradesInStore.forEach((upgrade) => {
-      const delta = simulateUpgrade(upgrade);
-      const cost = priceOf(upgrade);
+      Game.UpgradesInStore.forEach((upgrade) => {
+        const delta = simulateUpgrade(upgrade);
+        const cost = priceOf(upgrade);
 
-      if (delta > 0) {
-        const wait = currentCps > 0 ? Math.max(cost - Game.cookies, 0) / currentCps / 60 : Infinity;
-        const payback = cost / delta / 60;
+        if (delta > 0) {
+          const wait = currentCps > 0 ? Math.max(cost - Game.cookies, 0) / currentCps / 60 : Infinity;
+          const payback = cost / delta / 60;
 
-        rows.push({
-          type: 'Upgrade',
-          name: localName(upgrade.dname || upgrade.name),
-          owned: '-',
-          cost,
-          cpsGain: delta,
-          effectiveMinutes: wait + payback,
-          waitMinutes: wait,
-          paybackMinutes: payback,
-        });
-      }
-    });
+          rows.push({
+            type: 'Upgrade',
+            name: localName(upgrade.dname || upgrade.name),
+            owned: '-',
+            cost,
+            cpsGain: delta,
+            effectiveMinutes: wait + payback,
+            waitMinutes: wait,
+            paybackMinutes: payback,
+          });
+        }
+      });
+    } finally {
+      isSimulatingPurchase = false;
+    }
 
     return rows.sort((a, b) => a.effectiveMinutes - b.effectiveMinutes);
   }
@@ -366,6 +397,7 @@
     })));
 
     renderTable(rows);
+    rememberPurchaseState();
   }
 
   function createPanel() {
