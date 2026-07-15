@@ -175,12 +175,12 @@
 
       #${PANEL_ID} {
         position: absolute;
-        left: 50%;
-        top: 8px;
-        transform: translateX(-50%);
-        width: min(720px, calc(100% - 48px));
-        height: calc(100% - 16px);
-        max-height: calc(100% - 16px);
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        box-sizing: border-box;
         z-index: 1000000;
         display: none;
         overflow: hidden;
