@@ -77,7 +77,19 @@
     const remainingMinutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
 
-    return `${years} y ${days} d ${hours} h ${remainingMinutes} m ${String(seconds).padStart(2, '0')} s`;
+    const parts = [
+      { value: years, label: 'y' },
+      { value: days, label: 'd' },
+      { value: hours, label: 'h' },
+      { value: remainingMinutes, label: 'm' },
+      { value: seconds, label: 's', padded: true },
+    ];
+    const firstVisibleIndex = parts.findIndex((part) => part.value > 0);
+
+    return parts
+      .slice(firstVisibleIndex === -1 ? parts.length - 1 : firstVisibleIndex)
+      .map((part) => `${part.padded ? String(part.value).padStart(2, '0') : part.value}${part.label}`)
+      .join(',');
   }
 
   function getPlannerRoot() {
