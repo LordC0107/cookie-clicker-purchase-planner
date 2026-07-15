@@ -36,6 +36,31 @@
     return `${(hours / 24).toFixed(2)} days`;
   }
 
+  function getPlannerRoot() {
+    return document.getElementById('sectionMiddle') || document.body;
+  }
+
+  function getButtonHost() {
+    return document.getElementById('commentsText') || getPlannerRoot();
+  }
+
+  function getPanelHost() {
+    return document.getElementById('centerArea') || getPlannerRoot();
+  }
+
+  function preparePlannerHosts() {
+    getButtonHost().classList.add('purchase-planner-button-host');
+    getPanelHost().classList.add('purchase-planner-panel-host');
+  }
+
+  function setPlannerOpen(open) {
+    getPlannerRoot().classList.toggle('purchase-planner-open', open);
+  }
+
+  function togglePlanner() {
+    getPlannerRoot().classList.toggle('purchase-planner-open');
+  }
+
   function simulateBuilding(building) {
     const oldAmount = building.amount;
     const oldCps = Game.cookiesPs;
@@ -121,10 +146,15 @@
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
+      .purchase-planner-button-host,
+      .purchase-planner-panel-host {
+        position: relative;
+      }
+
       #${BUTTON_ID} {
-        position: fixed;
+        position: absolute;
         left: 50%;
-        top: 63px;
+        bottom: 2px;
         transform: translateX(-50%);
         z-index: 1000000;
         border: 1px solid rgba(238, 204, 128, 0.78);
@@ -144,12 +174,13 @@
       }
 
       #${PANEL_ID} {
-        position: fixed;
+        position: absolute;
         left: 50%;
-        top: 112px;
+        top: 8px;
         transform: translateX(-50%);
-        width: min(720px, calc(100vw - 48px));
-        max-height: min(620px, calc(100vh - 136px));
+        width: min(720px, calc(100% - 48px));
+        height: calc(100% - 16px);
+        max-height: calc(100% - 16px);
         z-index: 1000000;
         display: none;
         overflow: hidden;
@@ -199,7 +230,7 @@
       }
 
       .purchase-planner-body {
-        max-height: calc(min(620px, 100vh - 136px) - 43px);
+        max-height: calc(100% - 43px);
         overflow: auto;
       }
 
@@ -317,12 +348,13 @@
       </div>
       <div class="purchase-planner-body"></div>
     `;
-    document.body.appendChild(panel);
+    preparePlannerHosts();
+    getPanelHost().appendChild(panel);
 
     panel.addEventListener('click', (event) => {
       const action = event.target && event.target.getAttribute('data-action');
       if (action === 'refresh') refreshPlanner();
-      if (action === 'close') document.body.classList.remove('purchase-planner-open');
+      if (action === 'close') setPlannerOpen(false);
     });
   }
 
@@ -334,11 +366,12 @@
     button.type = 'button';
     button.textContent = MOD_NAME;
     button.addEventListener('click', () => {
-      document.body.classList.toggle('purchase-planner-open');
+      togglePlanner();
       refreshPlanner();
     });
 
-    document.body.appendChild(button);
+    preparePlannerHosts();
+    getButtonHost().appendChild(button);
   }
 
   function init() {
