@@ -123,15 +123,17 @@
     style.textContent = `
       #${BUTTON_ID} {
         position: fixed;
-        right: 18px;
-        top: 96px;
+        left: 50%;
+        top: 63px;
+        transform: translateX(-50%);
         z-index: 1000000;
         border: 1px solid rgba(238, 204, 128, 0.78);
         background: rgba(31, 22, 14, 0.92);
         color: #f8df9f;
         font: 700 12px Georgia, "Times New Roman", serif;
         letter-spacing: 0;
-        padding: 7px 10px;
+        min-width: 168px;
+        padding: 7px 14px;
         box-shadow: 0 2px 0 #000, inset 0 0 18px rgba(255, 205, 92, 0.12);
         cursor: pointer;
       }
@@ -143,10 +145,11 @@
 
       #${PANEL_ID} {
         position: fixed;
-        right: 18px;
-        top: 132px;
-        width: min(760px, calc(100vw - 36px));
-        max-height: min(680px, calc(100vh - 156px));
+        left: 50%;
+        top: 112px;
+        transform: translateX(-50%);
+        width: min(720px, calc(100vw - 48px));
+        max-height: min(620px, calc(100vh - 136px));
         z-index: 1000000;
         display: none;
         overflow: hidden;
@@ -196,7 +199,7 @@
       }
 
       .purchase-planner-body {
-        max-height: calc(min(680px, 100vh - 156px) - 43px);
+        max-height: calc(min(620px, 100vh - 136px) - 43px);
         overflow: auto;
       }
 
@@ -223,6 +226,12 @@
 
       .purchase-planner-table th:nth-child(2),
       .purchase-planner-table td:nth-child(2) {
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .purchase-planner-table th:first-child,
+      .purchase-planner-table td:first-child {
         text-align: left;
         white-space: normal;
       }
@@ -253,27 +262,23 @@
       <table class="purchase-planner-table">
         <thead>
           <tr>
-            <th>Type</th>
             <th>Name</th>
             <th>Owned</th>
-            <th>Cost</th>
-            <th>CPS gain</th>
             <th>Wait</th>
+            <th>Efficient</th>
             <th>Payback</th>
-            <th>Effective</th>
+            <th>CPS gain</th>
           </tr>
         </thead>
         <tbody>
           ${rows.map((row) => `
             <tr>
-              <td>${row.type}</td>
               <td>${row.name}</td>
               <td>${row.owned}</td>
-              <td>${beautify(row.cost)}</td>
-              <td>${beautify(row.cpsGain)}</td>
               <td>${formatMinutes(row.waitMinutes)}</td>
-              <td>${formatMinutes(row.paybackMinutes)}</td>
               <td>${formatMinutes(row.effectiveMinutes)}</td>
+              <td>${formatMinutes(row.paybackMinutes)}</td>
+              <td>${beautify(row.cpsGain)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -286,13 +291,11 @@
     const rows = getPurchasePlan();
 
     console.table(rows.map((row) => ({
-      type: row.type,
       name: row.name,
-      number: row.owned,
-      effective: formatMinutes(row.effectiveMinutes),
+      owned: row.owned,
       wait: formatMinutes(row.waitMinutes),
+      efficient: formatMinutes(row.effectiveMinutes),
       payback: formatMinutes(row.paybackMinutes),
-      cost: row.cost,
       cpsGain: row.cpsGain,
     })));
 
