@@ -186,7 +186,7 @@
         left: 50%;
         bottom: 2px;
         transform: translateX(-50%);
-        z-index: 1000000;
+        z-index: 900000;
         border: 1px solid rgba(238, 204, 128, 0.78);
         background: rgba(31, 22, 14, 0.92);
         color: #f8df9f;
@@ -211,7 +211,7 @@
         height: 100%;
         max-height: 100%;
         box-sizing: border-box;
-        z-index: 1000000;
+        z-index: 900000;
         display: none;
         overflow: hidden;
         border: 1px solid rgba(238, 204, 128, 0.8);
@@ -223,6 +223,11 @@
 
       .purchase-planner-open #${PANEL_ID} {
         display: block;
+      }
+
+      #shimmers,
+      .shimmer {
+        z-index: 1000001 !important;
       }
 
       .purchase-planner-header {
