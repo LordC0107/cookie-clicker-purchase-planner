@@ -66,10 +66,18 @@
 
   function formatMinutes(minutes) {
     if (!Number.isFinite(minutes)) return 'never';
-    if (minutes < 60) return `${minutes.toFixed(2)} min`;
-    const hours = minutes / 60;
-    if (hours < 48) return `${hours.toFixed(2)} hr`;
-    return `${(hours / 24).toFixed(2)} days`;
+
+    let totalSeconds = Math.max(0, Math.round(minutes * 60));
+    const years = Math.floor(totalSeconds / 31536000);
+    totalSeconds %= 31536000;
+    const days = Math.floor(totalSeconds / 86400);
+    totalSeconds %= 86400;
+    const hours = Math.floor(totalSeconds / 3600);
+    totalSeconds %= 3600;
+    const remainingMinutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    return `${years} y ${days} d ${hours} h ${remainingMinutes} m ${String(seconds).padStart(2, '0')} s`;
   }
 
   function getPlannerRoot() {
