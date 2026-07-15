@@ -17,7 +17,8 @@ The shorter the efficient time, the sooner that purchase is expected to become w
 - Calculates wait time, efficient time, payback time, and CPS gain.
 - Sorts results from best to worst efficient time.
 - Shows an in-game table from a centered `Purchase Planner` button near the news ticker.
-- Refreshes the table automatically after buying a building or upgrade while the panel is open.
+- Updates wait and efficiency times every second while the panel is open.
+- Recalculates the full purchase plan after buying a building or upgrade, with a one-second state check as a fallback.
 - Also prints the same result to the browser console with `console.table`.
 
 ## Usage

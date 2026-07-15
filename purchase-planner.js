@@ -6,9 +6,13 @@
   const PANEL_ID = 'purchase-planner-panel';
   const BUTTON_ID = 'purchase-planner-button';
   const STYLE_ID = 'purchase-planner-style';
-  let purchaseWatcherInstalled = false;
   let isSimulatingPurchase = false;
   let pendingPurchaseRefresh = false;
+  let refreshTimer = null;
+  let cachedRows = [];
+  let lastPurchaseSignature = '';
+  let lastCalculatedCps = 0;
+  const wrappedItems = new WeakSet();
 
   function gameReady() {
     return typeof Game !== 'undefined' && Game.ObjectsById && Game.UpgradesInStore;
@@ -60,41 +64,87 @@
     return getPlannerRoot().classList.contains('purchase-planner-open');
   }
 
+  function getPurchaseSignature() {
+    if (!gameReady()) return '';
+
+    const buildings = Game.ObjectsById.map((building) => building.amount).join(',');
+    const upgrades = (Game.UpgradesById || Game.UpgradesInStore)
+      .map((upgrade) => (upgrade.bought ? 1 : 0))
+      .join('');
+
+    return `${buildings}|${upgrades}`;
+  }
+
+  function getOwnedState(item) {
+    if (item && typeof item.amount === 'number') return `amount:${item.amount}`;
+    if (item && typeof item.bought !== 'undefined') return `bought:${item.bought ? 1 : 0}`;
+    return '';
+  }
+
   function schedulePurchaseRefresh() {
     if (!isPlannerOpen() || isSimulatingPurchase || pendingPurchaseRefresh) return;
 
     pendingPurchaseRefresh = true;
     setTimeout(() => {
       pendingPurchaseRefresh = false;
-      if (isPlannerOpen()) refreshPlanner();
+      if (isPlannerOpen()) refreshPlanner(true);
     }, 0);
   }
 
   function wrapBuyMethod(item) {
-    if (!item || typeof item.buy !== 'function' || item.purchasePlannerWrapped) return;
+    if (!item || typeof item.buy !== 'function' || wrappedItems.has(item)) return;
 
     const oldBuy = item.buy;
     item.buy = function purchasePlannerBuyWrapper() {
+      const before = getOwnedState(item);
       const result = oldBuy.apply(this, arguments);
-      schedulePurchaseRefresh();
+      if (getOwnedState(item) !== before) schedulePurchaseRefresh();
       return result;
     };
-    item.purchasePlannerWrapped = true;
+    wrappedItems.add(item);
   }
 
   function installPurchaseWatcher() {
-    if (purchaseWatcherInstalled || !gameReady()) return;
-    purchaseWatcherInstalled = true;
+    if (!gameReady()) return;
 
     Game.ObjectsById.forEach(wrapBuyMethod);
     (Game.UpgradesById || Game.UpgradesInStore).forEach(wrapBuyMethod);
+  }
+
+  function stopRefreshTimer() {
+    if (refreshTimer === null) return;
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+
+  function refreshPlannerTick() {
+    if (!isPlannerOpen() || isSimulatingPurchase) return;
+
+    installPurchaseWatcher();
+    const nextSignature = getPurchaseSignature();
+    const cpsChanged = Math.abs(Game.cookiesPs - lastCalculatedCps) > Math.max(1e-9, Math.abs(lastCalculatedCps) * 1e-12);
+
+    if (nextSignature !== lastPurchaseSignature || cpsChanged) {
+      refreshPlanner(true);
+      return;
+    }
+
+    refreshPlanner(false);
+  }
+
+  function startRefreshTimer() {
+    stopRefreshTimer();
+    refreshTimer = setInterval(refreshPlannerTick, 1000);
   }
 
   function setPlannerOpen(open) {
     getPlannerRoot().classList.toggle('purchase-planner-open', open);
     if (open) {
       installPurchaseWatcher();
-      refreshPlanner();
+      refreshPlanner(true);
+      startRefreshTimer();
+    } else {
+      stopRefreshTimer();
     }
   }
 
@@ -106,34 +156,36 @@
     const oldAmount = building.amount;
     const oldCps = Game.cookiesPs;
 
-    building.amount += 1;
-    Game.CalculateGains();
-
-    const delta = Game.cookiesPs - oldCps;
-
-    building.amount = oldAmount;
-    Game.CalculateGains();
-
-    return delta;
+    try {
+      building.amount += 1;
+      Game.CalculateGains();
+      return Game.cookiesPs - oldCps;
+    } finally {
+      building.amount = oldAmount;
+      Game.CalculateGains();
+    }
   }
 
   function simulateUpgrade(upgrade) {
     const oldBought = upgrade.bought;
     const oldCps = Game.cookiesPs;
 
-    upgrade.bought = 1;
-    Game.CalculateGains();
-
-    const delta = Game.cookiesPs - oldCps;
-
-    upgrade.bought = oldBought;
-    Game.CalculateGains();
-
-    return delta;
+    try {
+      upgrade.bought = 1;
+      Game.CalculateGains();
+      return Game.cookiesPs - oldCps;
+    } finally {
+      upgrade.bought = oldBought;
+      Game.CalculateGains();
+    }
   }
 
   function getPurchasePlan() {
     const rows = [];
+
+    // Purchases can update ownership before Cookie Clicker recalculates cookiesPs.
+    // Synchronize the baseline so the first simulated item does not absorb that gain.
+    Game.CalculateGains();
     const currentCps = Math.max(Game.cookiesPs, 0);
 
     isSimulatingPurchase = true;
@@ -182,6 +234,19 @@
     } finally {
       isSimulatingPurchase = false;
     }
+
+    return rows.sort((a, b) => a.effectiveMinutes - b.effectiveMinutes);
+  }
+
+  function updateDynamicTimes(rows) {
+    const currentCps = Math.max(Game.cookiesPs, 0);
+
+    rows.forEach((row) => {
+      row.waitMinutes = currentCps > 0
+        ? Math.max(row.cost - Game.cookies, 0) / currentCps / 60
+        : Infinity;
+      row.effectiveMinutes = row.waitMinutes + row.paybackMinutes;
+    });
 
     return rows.sort((a, b) => a.effectiveMinutes - b.effectiveMinutes);
   }
@@ -368,10 +433,7 @@
     `;
   }
 
-  function refreshPlanner() {
-    if (!gameReady()) return;
-    const rows = getPurchasePlan();
-
+  function logRows(rows) {
     console.table(rows.map((row) => ({
       name: row.name,
       owned: row.owned,
@@ -380,8 +442,21 @@
       payback: formatMinutes(row.paybackMinutes),
       cpsGain: row.cpsGain,
     })));
+  }
 
-    renderTable(rows);
+  function refreshPlanner(fullRefresh) {
+    if (!gameReady()) return;
+
+    if (fullRefresh || !cachedRows.length) {
+      cachedRows = getPurchasePlan();
+      lastPurchaseSignature = getPurchaseSignature();
+      lastCalculatedCps = Game.cookiesPs;
+      logRows(cachedRows);
+    } else {
+      updateDynamicTimes(cachedRows);
+    }
+
+    renderTable(cachedRows);
   }
 
   function createPanel() {
@@ -404,7 +479,7 @@
 
     panel.addEventListener('click', (event) => {
       const action = event.target && event.target.getAttribute('data-action');
-      if (action === 'refresh') refreshPlanner();
+      if (action === 'refresh') refreshPlanner(true);
       if (action === 'close') setPlannerOpen(false);
     });
   }
@@ -428,10 +503,12 @@
     injectStyles();
     createPanel();
     createButton();
-    refreshPlanner();
+    refreshPlanner(true);
 
     window.PurchasePlanner = {
-      refresh: refreshPlanner,
+      refresh() {
+        refreshPlanner(true);
+      },
       getPlan: getPurchasePlan,
     };
 
