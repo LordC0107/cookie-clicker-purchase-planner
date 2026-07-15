@@ -18,6 +18,35 @@
     return typeof Game !== 'undefined' && Game.ObjectsById && Game.UpgradesInStore;
   }
 
+  function collectionToArray(collection) {
+    if (!collection) return [];
+    if (Array.isArray(collection)) return collection;
+
+    if (typeof collection.length === 'number') {
+      return Array.prototype.slice.call(collection);
+    }
+
+    if (typeof collection === 'object') {
+      return Object.keys(collection).map((key) => collection[key]);
+    }
+
+    return [];
+  }
+
+  function getAllUpgrades() {
+    const upgradesById = collectionToArray(Game.UpgradesById);
+    if (upgradesById.length) return upgradesById;
+
+    const upgradesByName = collectionToArray(Game.Upgrades);
+    if (upgradesByName.length) return upgradesByName;
+
+    return collectionToArray(Game.UpgradesInStore);
+  }
+
+  function getStoreUpgrades() {
+    return collectionToArray(Game.UpgradesInStore);
+  }
+
   function localName(value) {
     if (typeof loc === 'function') return loc(value);
     return value;
@@ -68,7 +97,7 @@
     if (!gameReady()) return '';
 
     const buildings = Game.ObjectsById.map((building) => building.amount).join(',');
-    const upgrades = (Game.UpgradesById || Game.UpgradesInStore)
+    const upgrades = getAllUpgrades()
       .map((upgrade) => (upgrade.bought ? 1 : 0))
       .join('');
 
@@ -108,7 +137,7 @@
     if (!gameReady()) return;
 
     Game.ObjectsById.forEach(wrapBuyMethod);
-    (Game.UpgradesById || Game.UpgradesInStore).forEach(wrapBuyMethod);
+    getAllUpgrades().forEach(wrapBuyMethod);
   }
 
   function stopRefreshTimer() {
@@ -211,7 +240,7 @@
         }
       });
 
-      Game.UpgradesInStore.forEach((upgrade) => {
+      getStoreUpgrades().forEach((upgrade) => {
         const delta = simulateUpgrade(upgrade);
         const cost = priceOf(upgrade);
 
@@ -433,6 +462,17 @@
     `;
   }
 
+  function renderPlannerError(error) {
+    const body = document.querySelector(`#${PANEL_ID} .purchase-planner-body`);
+    if (!body) return;
+
+    body.innerHTML = '';
+    const message = document.createElement('div');
+    message.className = 'purchase-planner-empty';
+    message.textContent = `Unable to refresh the purchase plan: ${error && error.message ? error.message : error}`;
+    body.appendChild(message);
+  }
+
   function logRows(rows) {
     console.table(rows.map((row) => ({
       name: row.name,
@@ -447,16 +487,21 @@
   function refreshPlanner(fullRefresh) {
     if (!gameReady()) return;
 
-    if (fullRefresh || !cachedRows.length) {
-      cachedRows = getPurchasePlan();
-      lastPurchaseSignature = getPurchaseSignature();
-      lastCalculatedCps = Game.cookiesPs;
-      logRows(cachedRows);
-    } else {
-      updateDynamicTimes(cachedRows);
-    }
+    try {
+      if (fullRefresh || !cachedRows.length) {
+        cachedRows = getPurchasePlan();
+        lastPurchaseSignature = getPurchaseSignature();
+        lastCalculatedCps = Game.cookiesPs;
+        logRows(cachedRows);
+      } else {
+        updateDynamicTimes(cachedRows);
+      }
 
-    renderTable(cachedRows);
+      renderTable(cachedRows);
+    } catch (error) {
+      console.error(`[${MOD_NAME}] Failed to refresh the purchase plan.`, error);
+      renderPlannerError(error);
+    }
   }
 
   function createPanel() {
