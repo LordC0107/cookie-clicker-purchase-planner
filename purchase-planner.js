@@ -7,8 +7,8 @@
   const BUTTON_ID = 'purchase-planner-button';
   const STYLE_ID = 'purchase-planner-style';
   let purchaseWatcherInstalled = false;
-  let lastPurchaseSignature = '';
   let isSimulatingPurchase = false;
+  let pendingPurchaseRefresh = false;
 
   function gameReady() {
     return typeof Game !== 'undefined' && Game.ObjectsById && Game.UpgradesInStore;
@@ -60,47 +60,34 @@
     return getPlannerRoot().classList.contains('purchase-planner-open');
   }
 
-  function getPurchaseSignature() {
-    if (!gameReady()) return '';
+  function schedulePurchaseRefresh() {
+    if (!isPlannerOpen() || isSimulatingPurchase || pendingPurchaseRefresh) return;
 
-    const buildings = Game.ObjectsById.map((building) => building.amount).join(',');
-    const upgrades = (Game.UpgradesById || Game.UpgradesInStore)
-      .map((upgrade) => (upgrade.bought ? 1 : 0))
-      .join('');
-
-    return `${buildings}|${upgrades}`;
+    pendingPurchaseRefresh = true;
+    setTimeout(() => {
+      pendingPurchaseRefresh = false;
+      if (isPlannerOpen()) refreshPlanner();
+    }, 0);
   }
 
-  function rememberPurchaseState() {
-    lastPurchaseSignature = getPurchaseSignature();
-  }
+  function wrapBuyMethod(item) {
+    if (!item || typeof item.buy !== 'function' || item.purchasePlannerWrapped) return;
 
-  function watchPurchases() {
-    if (!isPlannerOpen() || isSimulatingPurchase) return;
-
-    const nextSignature = getPurchaseSignature();
-    if (!nextSignature || nextSignature === lastPurchaseSignature) return;
-
-    refreshPlanner();
+    const oldBuy = item.buy;
+    item.buy = function purchasePlannerBuyWrapper() {
+      const result = oldBuy.apply(this, arguments);
+      schedulePurchaseRefresh();
+      return result;
+    };
+    item.purchasePlannerWrapped = true;
   }
 
   function installPurchaseWatcher() {
     if (purchaseWatcherInstalled || !gameReady()) return;
     purchaseWatcherInstalled = true;
 
-    if (typeof Game.registerHook === 'function') {
-      Game.registerHook('logic', watchPurchases);
-      return;
-    }
-
-    const oldLogic = Game.Logic;
-    if (typeof oldLogic === 'function') {
-      Game.Logic = function purchasePlannerLogicWrapper() {
-        const result = oldLogic.apply(this, arguments);
-        watchPurchases();
-        return result;
-      };
-    }
+    Game.ObjectsById.forEach(wrapBuyMethod);
+    (Game.UpgradesById || Game.UpgradesInStore).forEach(wrapBuyMethod);
   }
 
   function setPlannerOpen(open) {
@@ -108,8 +95,6 @@
     if (open) {
       installPurchaseWatcher();
       refreshPlanner();
-    } else {
-      rememberPurchaseState();
     }
   }
 
@@ -397,7 +382,6 @@
     })));
 
     renderTable(rows);
-    rememberPurchaseState();
   }
 
   function createPanel() {
