@@ -24,10 +24,12 @@ The shorter the efficient time, the sooner that purchase is expected to become w
 Open Cookie Clicker, then load the mod with:
 
 ```javascript
-Game.LoadMod('https://cdn.jsdelivr.net/gh/LordC0107/cookie-clicker-purchase-planner@main/purchase-planner.js');
+Game.LoadMod('https://lordc0107.github.io/cookie-clicker-purchase-planner/purchase-planner.js');
 ```
 
 After the mod loads, click the `Purchase Planner` button near the top center of the game screen.
+
+Use the full `https://` URL. If the protocol is omitted, some Cookie Clicker mirror sites may treat the path as a local site path and try to load it from their own domain instead.
 
 The table columns are:
 
